@@ -13,6 +13,7 @@ use IO::Socket::SSL qw(SSL_VERIFY_NONE);
 use String::Util qw(trim);
 use File::Basename qw(dirname);
 use File::Spec;
+use Devel::KYTProf;
 
 sub db {
     state $db ||= do {
