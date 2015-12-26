@@ -15,6 +15,66 @@ use File::Basename qw(dirname);
 use File::Spec;
 use Devel::KYTProf;
 
+sub endpoints {
+    my ($service) = @_;
+    my $services = [
+        {
+            service => 'ken',
+            meth => 'GET',
+            token_type => undef,
+            token_key => undef,
+            uri => 'http://api.five-final.isucon.net:8082/%s'
+        },
+        {
+            service => 'ken2',
+            meth => 'GET',
+            token_type => undef,
+            token_key => undef,
+            uri => 'http://api.five-final.isucon.net:8082/'
+        },
+        {
+            service => 'surname',
+            meth => 'GET',
+            token_type => undef,
+            token_key => undef,
+            uri => 'http://api.five-final.isucon.net:8081/surname'
+        },
+        {
+            service => 'givenname',
+            meth => 'GET',
+            token_type => undef,
+            token_key => undef,
+            uri => 'http://api.five-final.isucon.net:8081/givenname'
+        },
+        {
+            service => 'tenki',
+            meth => 'GET',
+            token_type => 'param',
+            token_key => 'zipcode',
+            uri => 'http://api.five-final.isucon.net:8988/'
+        },
+        {
+            service => 'perfectsec',
+            meth => 'GET',
+            token_type => 'header',
+            token_key => 'X-PERFECT-SECURITY-TOKEN',
+            uri => 'https://api.five-final.isucon.net:8443/tokens'
+        },
+        {
+            service => 'perfectsec_attacked',
+            meth => 'GET',
+            token_type => 'header',
+            token_key => 'X-PERFECT-SECURITY-TOKEN',
+            uri => 'https://api.five-final.isucon.net:8443/attacked_list'
+        },
+    ];
+    if ($service) {
+        my ($hit) = grep { $_->{service} eq $service } @$services;
+        return $hit;
+    }
+    return $services;
+}
+
 sub db {
     state $db ||= do {
         my %db = (
