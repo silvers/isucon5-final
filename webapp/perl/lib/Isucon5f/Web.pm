@@ -14,6 +14,18 @@ use String::Util qw(trim);
 use File::Basename qw(dirname);
 use File::Spec;
 use Devel::KYTProf;
+use Cache::Isolator;
+use Cache::Memcached::Fast;
+
+my $isolator = Cache::Isolator->new(
+    cache => Cache::Memcached::Fast->new({
+        servers => [ 'localhost:11211' ]
+    }),
+    concurrency => 4, # get_or_setのcallbackの最大平行動作数。デフォルト1
+    interval => 0.01, #lockを確認するinterval
+    timeout => 10, #lockする最長時間
+    trial => 0, #lockを試行する最大回数
+);
 
 sub endpoints {
     my ($service) = @_;
@@ -73,6 +85,13 @@ sub endpoints {
         return $hit;
     }
     return $services;
+}
+
+sub cache_expiration {
+    my ($service) = @_;
+    return 86400 if ($service =~ /ken/);
+    return 86400 if ($service =~ /users/);
+    return 100; # 暫定
 }
 
 sub db {
@@ -261,14 +280,21 @@ SQL
 };
 
 sub fetch_api {
-    my ($method, $uri, $headers, $params) = @_;
+    my ($method, $uri, $headers, $params, $expiration) = @_;
     my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
     $uri = URI->new($uri);
     $uri->query_form(%$params);
-    my $res = $client->request(
-        method => $method,
-        url => $uri,
-        headers => [%$headers],
+    my $cache_key = join(':', $uri->as_string, %$headers);
+    my $res = $isolator->get_or_set(
+        $cache_key,
+        sub {
+            $client->request(
+                method => $method,
+                url => $uri,
+                headers => [%$headers],
+            );
+        },
+        $expiration,
     );
     return decode_json($res->content);
 }
@@ -285,6 +311,7 @@ get '/data' => [qw(set_global)] => sub {
 
     while (my ($service, $conf) = each(%$arg)) {
         my $row = endpoints($service);
+        my $expiration = cache_expiration($service);
         my $method = $row->{meth};
         my $token_type = $row->{token_type};
         my $token_key = $row->{token_key};
@@ -300,7 +327,7 @@ get '/data' => [qw(set_global)] => sub {
             }
         }
         my $uri = sprintf($uri_template, @{$conf->{keys} || []});
-        push @$data, { service => $service, data => fetch_api($method, $uri, $headers, $params) };
+        push @$data, { service => $service, data => fetch_api($method, $uri, $headers, $params, $expiration) };
     }
 
     $c->res->header('Content-Type', 'application/json');
