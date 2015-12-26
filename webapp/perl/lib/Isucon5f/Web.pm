@@ -284,7 +284,7 @@ sub fetch_api {
     my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
     $uri = URI->new($uri);
     $uri->query_form(%$params);
-    my $cache_key = $uri->as_string . join(':', %$headers);
+    my $cache_key = join(':', $uri->as_string, %$headers);
     my $res = $isolator->get_or_set(
         $cache_key,
         sub {
