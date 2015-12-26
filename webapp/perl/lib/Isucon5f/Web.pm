@@ -228,11 +228,19 @@ get '/' => [qw(set_global)] => sub {
     $c->render('main.tx', { user => current_user() });
 };
 
+my $INTERVAL_MAP = +{
+    micro    => 30000,
+    small    => 30000,
+    standard => 20000,
+    premium  => 10000,
+};
 get '/user.js' => [qw(set_global)] => sub {
     my ($self, $c) = @_;
     $c->halt(403) if !current_user();
+    my $interval = $INTERVAL_MAP->{current_user()->{grade}};
+
     $c->res->header('Content-Type', 'application/javascript');
-    $c->render('userjs.tx', { grade => current_user()->{grade} });
+    $c->res->body("var AIR_ISU_REFRESH_INTERVAL = $interval;");
 };
 
 get '/modify' => [qw(set_global)] => sub {
