@@ -16,6 +16,8 @@ use File::Spec;
 use Devel::KYTProf;
 use Cache::Isolator;
 use Cache::Memcached::Fast;
+use HTTP::Async;
+use HTTP::Request;
 my $USER_CACHE_KEY = 'users';
 
 my $isolator = Cache::Isolator->new(
@@ -291,23 +293,38 @@ SQL
 };
 
 sub fetch_api {
-    my ($method, $uri, $headers, $params, $expiration) = @_;
-    my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
-    $uri = URI->new($uri);
-    $uri->query_form(%$params);
-    my $cache_key = join(':', $uri->as_string, %$headers);
-    my $res = $isolator->get_or_set(
-        $cache_key,
-        sub {
-            $client->request(
-                method => $method,
-                url => $uri,
-                headers => [%$headers],
-            );
-        },
-        $expiration,
-    );
-    return decode_json($res->content);
+    my ($reqs) = @_;
+    my $async = HTTP::Async->new;
+    map {
+        $async->add($_)
+    } @$reqs;
+    my $response = [];
+    while (my $res = $async->wait_for_next_response) {
+        if (my ($data) = grep { $_->{request} eq $res->request } @$reqs) {
+            push @$response, {
+                service => $data->{service},
+                data => decode_json($res->content),
+            }
+        }
+    }
+    return $response;
+    # my ($method, $uri, $headers, $params, $expiration) = @_;
+    # my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
+    # $uri = URI->new($uri);
+    # $uri->query_form(%$params);
+    # my $cache_key = join(':', $uri->as_string, %$headers);
+    # my $res = $isolator->get_or_set(
+    #     $cache_key,
+    #     sub {
+    #         $client->request(
+    #             method => $method,
+    #             url => $uri,
+    #             headers => [%$headers],
+    #         );
+    #     },
+    #     $expiration,
+    # );
+    # return decode_json($res->content);
 }
 
 sub get_data {
@@ -336,9 +353,16 @@ sub get_data {
             }
         }
         my $uri = sprintf($uri_template, @{$conf->{keys} || []});
-        push @$data, { service => $service, data => fetch_api($method, $uri, $headers, $params, $expiration) };
+        $uri = URI->new($uri);
+        $uri->query_form(%$params);
+        push @$data, {
+            service => $service,
+            request => HTTP::Request->new($method, $uri, $headers),
+            expiration => $expiration,
+        }
     }
-    return $data;
+    my $res = fetch_api($data);
+    return $res;
 }
 
 get '/data' => [qw(set_global)] => sub {
