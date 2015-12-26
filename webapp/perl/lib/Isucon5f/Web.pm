@@ -15,6 +15,8 @@ use File::Basename qw(dirname);
 use File::Spec;
 use Cache::Isolator;
 use Cache::Memcached::Fast;
+use HTTP::Async;
+use HTTP::Request;
 my $USER_CACHE_KEY = 'users';
 
 my $isolator = Cache::Isolator->new(
@@ -290,31 +292,44 @@ SQL
 };
 
 sub fetch_api {
-    my ($method, $uri, $headers, $params, $expiration) = @_;
-    my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
-    $uri = URI->new($uri);
-    $uri->query_form(%$params);
-    my $cache_key = join(':', $uri->as_string, %$headers);
-    my $res = $isolator->get_or_set(
-        $cache_key,
-        sub {
-            $client->request(
-                method => $method,
-                url => $uri,
-                headers => [%$headers],
-            );
-        },
-        $expiration,
-    );
-    return decode_json($res->content);
+    my ($reqs) = @_;
+    my $async = HTTP::Async->new;
+    map {
+        $async->add($_)
+    } @$reqs;
+    my $response = [];
+    while (my $res = $async->wait_for_next_response) {
+        if (my ($data) = grep { $_->{request} eq $res->request } @$reqs) {
+            push @$response, {
+                service => $data->{service},
+                data => decode_json($res->content),
+            }
+        }
+    }
+    return $response;
+    # my ($method, $uri, $headers, $params, $expiration) = @_;
+    # my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
+    # $uri = URI->new($uri);
+    # $uri->query_form(%$params);
+    # my $cache_key = join(':', $uri->as_string, %$headers);
+    # my $res = $isolator->get_or_set(
+    #     $cache_key,
+    #     sub {
+    #         $client->request(
+    #             method => $method,
+    #             url => $uri,
+    #             headers => [%$headers],
+    #         );
+    #     },
+    #     $expiration,
+    # );
+    # return decode_json($res->content);
 }
 
-get '/data' => [qw(set_global)] => sub {
-    my ($self, $c) = @_;
-    my $user = current_user();
-    $c->halt(403) if !$user;
+sub get_data {
+    my ($user_id) = @_;
 
-    my $arg_json = db->select_one("SELECT arg FROM subscriptions WHERE user_id=?", $user->{id});
+    my $arg_json = db->select_one("SELECT arg FROM subscriptions WHERE user_id=?", $user_id);
     my $arg = from_json($arg_json);
 
     my $data = [];
@@ -337,8 +352,23 @@ get '/data' => [qw(set_global)] => sub {
             }
         }
         my $uri = sprintf($uri_template, @{$conf->{keys} || []});
-        push @$data, { service => $service, data => fetch_api($method, $uri, $headers, $params, $expiration) };
+        $uri = URI->new($uri);
+        $uri->query_form(%$params);
+        push @$data, {
+            service => $service,
+            request => HTTP::Request->new($method, $uri, $headers),
+            expiration => $expiration,
+        }
     }
+    my $res = fetch_api($data);
+    return $res;
+}
+
+get '/data' => [qw(set_global)] => sub {
+    my ($self, $c) = @_;
+    my $user = current_user();
+    $c->halt(403) if !$user;
+    my $data = get_data($user->{id});
 
     $c->res->header('Content-Type', 'application/json');
     $c->res->body(encode_json($data));
@@ -351,6 +381,7 @@ get '/initialize' => sub {
     my $users = db->select_all("SELECT id,email,grade FROM users");
     for (@$users) {
         $isolator->set(sprintf('%s:%s', $USER_CACHE_KEY, $_->{id}), $_);
+        #get_data($_->{id});
     }
     [200];
 };

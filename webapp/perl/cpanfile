@@ -14,3 +14,5 @@ requires "WWW::Form::UrlEncoded::XS";
 requires "Devel::KYTProf";
 requires "Cache::Isolator";
 requires "Cache::Memcached::Fast";
+requires "HTTP::Async";
+requires "HTTP::Request";
