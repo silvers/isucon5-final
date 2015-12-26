@@ -358,7 +358,7 @@ get '/initialize' => sub {
     my $users = db->select_all("SELECT id,email,grade FROM users");
     for (@$users) {
         $isolator->set(sprintf('%s:%s', $USER_CACHE_KEY, $_->{id}), $_);
-        get_data($_->{id});
+        #get_data($_->{id});
     }
     [200];
 };
