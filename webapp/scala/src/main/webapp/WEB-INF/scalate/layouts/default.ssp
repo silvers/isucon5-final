@@ -1,6 +1,0 @@
-<%@ val body:String %>
-<%@ var title:String = "AirISU" %>
-<!DOCTYPE html>
-<html lang="ja">
-${unescape(body)}
-</html>

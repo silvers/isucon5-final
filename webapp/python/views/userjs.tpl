@@ -1,1 +1,0 @@
-var AIR_ISU_REFRESH_INTERVAL = {{grade}};
