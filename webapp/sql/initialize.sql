@@ -2,8 +2,8 @@ TRUNCATE endpoints;
 
 INSERT INTO endpoints (service, meth, token_type, token_key, uri)
 VALUES
-('ken', 'GET', NULL, NULL, 'http://api.five-final.isucon.net:8080/%s'),
-('ken2', 'GET', NULL, NULL, 'http://api.five-final.isucon.net:8080/'),
+('ken', 'GET', NULL, NULL, 'http://api.five-final.isucon.net:8082/%s'),
+('ken2', 'GET', NULL, NULL, 'http://api.five-final.isucon.net:8082/'),
 ('surname', 'GET', NULL, NULL, 'http://api.five-final.isucon.net:8081/surname'),
 ('givenname', 'GET', NULL, NULL, 'http://api.five-final.isucon.net:8081/givenname'),
 ('tenki', 'GET', 'param', 'zipcode', 'http://api.five-final.isucon.net:8988/'),
