@@ -342,7 +342,7 @@ get '/initialize' => sub {
     system("psql", "-f", $file, "isucon5f");
     my $users = db->select_all("SELECT id,email,grade FROM users");
     for (@$users) {
-        $isolator->set(sprintf('users:%s', $_->{user_id}), $_);
+        $isolator->set(sprintf('users:%s', $_->{id}), $_);
     }
     [200];
 };
