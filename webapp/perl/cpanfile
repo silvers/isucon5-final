@@ -2,13 +2,12 @@ requires "Kossy", 0.38;
 requires "DBIx::Sunny";
 
 requires "DBD::Pg";
-requires "Starman";
+requires "Gazelle";
 requires "Plack::Session";
 requires "Furl";
 requires "IO::Socket::SSL";
 requires "String::Util";
 requires "JSON::XS";
-requires "Gazelle";
 requires "HTTP::Parser::XS";
 requires "Cookie::Baker::XS";
 requires "WWW::Form::UrlEncoded::XS";
