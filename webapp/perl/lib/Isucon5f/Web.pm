@@ -90,7 +90,7 @@ sub endpoints {
 sub cache_expiration {
     my ($service) = @_;
     return 86400 if ($service =~ /ken/);
-    return 86400 if ($serivce =~ /users/);
+    return 86400 if ($service =~ /users/);
     return 100; # 暫定
 }
 
