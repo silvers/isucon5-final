@@ -138,7 +138,7 @@ sub current_user {
     my $user = stash->{user};
     return $user if $user;
     return undef if !session->{user_id};
-    $user = db->select_row('SELECT id,email,grade FROM users WHERE id=?', session->{user_id});
+    $user = $isolator->get(sprintf('user:%s', session->{user_id}));
     if (!$user) {
         session = +{};
     } else {
@@ -188,6 +188,8 @@ SQL
         my $txn = db->txn_scope;
         my $user_id = db->select_one($insert_user_query, $email, $salt, $salt, $password, $grade);
         db->query($insert_subscription_query, $user_id, to_json($default_arg));
+        my $new_user = db->select_row('SELECT id,email,grade FROM users WHERE id=?', $user_id);
+        $isolator->set(sprintf('users:%s', $user_id), $new_user);
         $txn->commit;
     }
     $c->redirect('/login');
@@ -338,6 +340,10 @@ get '/initialize' => sub {
     my ($self, $c) = @_;
     my $file = File::Spec->rel2abs("../../sql/initialize.sql", dirname(dirname(__FILE__)));
     system("psql", "-f", $file, "isucon5f");
+    my $users = db->select_all("SELECT id,email,grade FROM users");
+    for (@$users) {
+        $isolator->set(sprintf('users:%s', $_->{user_id}), $_);
+    }
     [200];
 };
 
