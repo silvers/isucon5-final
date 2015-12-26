@@ -13,7 +13,6 @@ use IO::Socket::SSL qw(SSL_VERIFY_NONE);
 use String::Util qw(trim);
 use File::Basename qw(dirname);
 use File::Spec;
-use Devel::KYTProf;
 use Cache::Isolator;
 use Cache::Memcached::Fast;
 my $USER_CACHE_KEY = 'users';
