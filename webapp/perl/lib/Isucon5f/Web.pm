@@ -310,12 +310,10 @@ sub fetch_api {
     return decode_json($res->content);
 }
 
-get '/data' => [qw(set_global)] => sub {
-    my ($self, $c) = @_;
-    my $user = current_user();
-    $c->halt(403) if !$user;
+sub get_data {
+    my ($user_id) = @_;
 
-    my $arg_json = db->select_one("SELECT arg FROM subscriptions WHERE user_id=?", $user->{id});
+    my $arg_json = db->select_one("SELECT arg FROM subscriptions WHERE user_id=?", $user_id);
     my $arg = from_json($arg_json);
 
     my $data = [];
@@ -340,6 +338,14 @@ get '/data' => [qw(set_global)] => sub {
         my $uri = sprintf($uri_template, @{$conf->{keys} || []});
         push @$data, { service => $service, data => fetch_api($method, $uri, $headers, $params, $expiration) };
     }
+    return $data;
+}
+
+get '/data' => [qw(set_global)] => sub {
+    my ($self, $c) = @_;
+    my $user = current_user();
+    $c->halt(403) if !$user;
+    my $data = get_data($user->{id});
 
     $c->res->header('Content-Type', 'application/json');
     $c->res->body(encode_json($data));
@@ -352,6 +358,7 @@ get '/initialize' => sub {
     my $users = db->select_all("SELECT id,email,grade FROM users");
     for (@$users) {
         $isolator->set(sprintf('%s:%s', $USER_CACHE_KEY, $_->{id}), $_);
+        get_data($_->{id});
     }
     [200];
 };
