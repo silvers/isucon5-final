@@ -12,3 +12,4 @@ requires "Gazelle";
 requires "HTTP::Parser::XS";
 requires "Cookie::Baker::XS";
 requires "WWW::Form::UrlEncoded::XS";
+requires "Devel::KYTProf";
