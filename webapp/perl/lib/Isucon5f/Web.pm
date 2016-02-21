@@ -4,6 +4,7 @@ use 5.020;
 use strict;
 use warnings;
 use utf8;
+use Encode;
 use Kossy;
 use DBIx::Sunny;
 use JSON;
@@ -358,7 +359,7 @@ get '/data' => [qw(set_global)] => sub {
     $c->res->body(encode_json([ map {
         {
             service => $_->{Service},
-            data => decode_json($_->{Value}),
+            data => decode_json(Encode::encode_utf8 $_->{Value}),
         }
     } @$data ]));
 };
