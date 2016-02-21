@@ -16,6 +16,7 @@ use File::Spec;
 use Cache::Isolator;
 use Cache::Memcached::Fast;
 my $USER_CACHE_KEY = 'users';
+my $GOLANG_ENDPOINT = 'localhost:8083';
 
 my $isolator = Cache::Isolator->new(
     cache => Cache::Memcached::Fast->new({
@@ -317,7 +318,7 @@ get '/data' => [qw(set_global)] => sub {
     my $arg_json = db->select_one("SELECT arg FROM subscriptions WHERE user_id=?", $user->{id});
     my $arg = from_json($arg_json);
 
-    my $data = [];
+    my $body = [];
 
     while (my ($service, $conf) = each(%$arg)) {
         my $row = endpoints($service);
@@ -336,12 +337,26 @@ get '/data' => [qw(set_global)] => sub {
                 $params->{$token_key} = $conf->{'token'};
             }
         }
-        my $uri = sprintf($uri_template, @{$conf->{keys} || []});
-        push @$data, { service => $service, data => fetch_api($method, $uri, $headers, $params, $expiration) };
+        my $uri = URI->new(sprintf($uri_template, @{$conf->{keys} || []}));
+        $uri->query_form(%$params);
+        push @$body, {
+            Service => $service,
+            Headers => $headers,
+            Method  => $method,
+            Endpoint => $uri->as_string,
+        };
     }
-
+    my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
+    # TODO: あとでキャッシュする
+    my $res = $client->get($GOLANG_ENDPOINT, ['Content-Type' => 'application/json'], $body);
+    my $data = decode_json($res->content);
     $c->res->header('Content-Type', 'application/json');
-    $c->res->body(encode_json($data));
+    $c->res->body(encode_json([ map {
+        {
+            service => $_->{Service},
+            data => $_->{Value},
+        }
+    } @$data ]));
 };
 
 get '/initialize' => sub {
