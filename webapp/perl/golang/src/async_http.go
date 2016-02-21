@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	// "fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	// "net/http/httputil"
@@ -58,7 +58,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 func parallelReq(requests []Req) <-chan Data {
 
 	wg := new(sync.WaitGroup)
-	reciever := make(chan Data, 1)
+	reciever := make(chan Data, len(requests))
 
 	go func() {
 		for i := range requests {
@@ -74,11 +74,11 @@ func parallelReq(requests []Req) <-chan Data {
 			go func() {
 				defer wg.Done()
 				res, _ := http.DefaultClient.Do(request)
-				bufbody := new(bytes.Buffer)
-				bufbody.ReadFrom(res.Body)
-				body := bufbody.String()
-				reciever <- Data{req.Service, body}
+				buf := make([]byte, res.ContentLength)
+				io.ReadFull(res.Body, buf)
+				body := string(buf)
 				res.Body.Close()
+				reciever <- Data{req.Service, body}
 			}()
 		}
 		wg.Wait()
