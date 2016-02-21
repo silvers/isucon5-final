@@ -1,9 +1,10 @@
 #!/bin/bash
-set -ux
+set -x
 
 cd $(dirname $0)
 
 branch="$1"
+
 if [ `uname -s` = 'Darwin' ]; then
     for server in "isucon5-final-app1" "isucon5-final-app2" "isucon5-final-app3"; do
         gcloud compute --project "isucon5-qualifier-oniyanma" ssh --zone "asia-east1-c" $server -- sudo -H /home/isucon/isucon5-final/deploy.sh $branch
