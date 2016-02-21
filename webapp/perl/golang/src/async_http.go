@@ -46,6 +46,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		res, ok := <-reciever
 		if !ok {
 			json, _ := json.Marshal(data)
+			w.Header().Set("Content-Type", "application/json")
 			w.Write(json)
 			return
 		}
