@@ -16,7 +16,7 @@ elif [ `whoami` != 'isucon' ]; then
 else
     git reset --hard
     git pull
-    if [ $branch != "" ]; then
+    if [ "$branch" != "" ]; then
         git checkout $branch
         git pull
     fi
