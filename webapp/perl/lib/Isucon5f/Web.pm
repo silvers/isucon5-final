@@ -347,7 +347,11 @@ get '/data' => [qw(set_global)] => sub {
 get '/initialize' => sub {
     my ($self, $c) = @_;
     my $file = File::Spec->rel2abs("../../sql/initialize.sql", dirname(dirname(__FILE__)));
-    system("psql", "-f", $file, "isucon5f");
+    system "psql",
+        -h => 'db.five-final.isucon.net',
+        -U => 'isucon5f',
+        -f => $file,
+        -d => "isucon5f";
     my $users = db->select_all("SELECT id,email,grade FROM users");
     for (@$users) {
         $isolator->set(sprintf('%s:%s', $USER_CACHE_KEY, $_->{id}), $_);
