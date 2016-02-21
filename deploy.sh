@@ -8,6 +8,8 @@ if [ `uname -s` = 'Darwin' ]; then
         gcloud compute --project "isucon5-qualifier-oniyanma" ssh --zone "asia-east1-c" $server -- sudo -H /home/isucon/isucon5-final/deploy.sh
     done
 elif [ `whoami` != 'isucon' ]; then
+    sudo -u isucon -H git reset --hard
+    sudo -u isucon -H git pull
     sudo -u isucon -H $PWD/deploy.sh
 else
     git reset --hard
