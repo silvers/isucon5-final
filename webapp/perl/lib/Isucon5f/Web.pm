@@ -349,7 +349,7 @@ get '/data' => [qw(set_global)] => sub {
     }
     my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
     # TODO: あとでキャッシュする
-    my $res = $client->post($GOLANG_ENDPOINT, ['Content-Type' => 'application/json'], $body);
+    my $res = $client->post($GOLANG_ENDPOINT, ['Content-Type' => 'application/json'], encode_json($body));
     my $data = decode_json($res->content);
     $c->res->header('Content-Type', 'application/json');
     $c->res->body(encode_json([ map {
