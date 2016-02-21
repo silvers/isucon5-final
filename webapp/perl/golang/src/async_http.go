@@ -37,7 +37,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	body, _ := ioutil.ReadAll(r.Body)
 	json.Unmarshal(body, &requests)
 
-	m := new(sync.Mutex)
 	data := make([]Data, 0, len(requests))
 
 	reciever := parallelReq(requests)
@@ -47,12 +46,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			json, _ := json.Marshal(data)
 			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
 			w.Write(json)
 			return
 		}
-		m.Lock()
 		data = append(data, res)
-		m.Unlock()
 	}
 
 }
@@ -73,10 +71,9 @@ func parallelReq(requests []Req) <-chan Data {
 				request.Header.Set(header[0], header[1])
 			}
 
-			client := new(http.Client)
 			go func() {
 				defer wg.Done()
-				res, _ := client.Do(request)
+				res, _ := http.DefaultClient.Do(request)
 				bufbody := new(bytes.Buffer)
 				bufbody.ReadFrom(res.Body)
 				body := bufbody.String()
