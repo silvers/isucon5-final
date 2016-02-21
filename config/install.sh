@@ -12,7 +12,7 @@ done
 
 sudo -H supervisorctl reload
 
-if `hostname` != 'isucon5-final-app1'; then
+if [ `hostname` != 'isucon5-final-app1' ]; then
     sudo -H supervisorctl stop h2o
 fi
 
