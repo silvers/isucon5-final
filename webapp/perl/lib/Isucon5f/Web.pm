@@ -4,6 +4,7 @@ use 5.020;
 use strict;
 use warnings;
 use utf8;
+use Encode;
 use Kossy;
 use DBIx::Sunny;
 use JSON;
@@ -16,6 +17,7 @@ use File::Spec;
 use Cache::Isolator;
 use Cache::Memcached::Fast;
 my $USER_CACHE_KEY = 'users';
+my $GOLANG_ENDPOINT = 'http://localhost:8083';
 
 my $isolator = Cache::Isolator->new(
     cache => Cache::Memcached::Fast->new({
@@ -318,7 +320,7 @@ get '/data' => [qw(set_global)] => sub {
     my $arg_json = db->select_one("SELECT arg FROM subscriptions WHERE user_id=?", $user->{id});
     my $arg = from_json($arg_json);
 
-    my $data = [];
+    my $body = [];
 
     while (my ($service, $conf) = each(%$arg)) {
         my $row = endpoints($service);
@@ -337,12 +339,29 @@ get '/data' => [qw(set_global)] => sub {
                 $params->{$token_key} = $conf->{'token'};
             }
         }
-        my $uri = sprintf($uri_template, @{$conf->{keys} || []});
-        push @$data, { service => $service, data => fetch_api($method, $uri, $headers, $params, $expiration) };
+        my $uri = URI->new(sprintf($uri_template, @{$conf->{keys} || []}));
+        $uri->query_form(%$params);
+        push @$body, {
+            Service => $service,
+            Headers => $headers,
+            Method  => $method,
+            Endpoint => $uri->as_string,
+        };
     }
-
+    my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
+    # TODO: あとでキャッシュする
+    my $res = $client->post($GOLANG_ENDPOINT, ['Content-Type' => 'application/json'], encode_json($body));
+    my $data = [];
+    if ($res->content) {
+        $data = decode_json($res->content);
+    }
     $c->res->header('Content-Type', 'application/json');
-    $c->res->body(encode_json($data));
+    $c->res->body(encode_json([ map {
+        {
+            service => $_->{Service},
+            data => decode_json(Encode::encode_utf8 $_->{Value}),
+        }
+    } @$data ]));
 };
 
 get '/initialize' => sub {

@@ -20,5 +20,7 @@ else
         git checkout $branch
         git pull
     fi
+    pkill async_http
     ./config/install.sh
+    sudo -H supervisorctl start golang
 fi
