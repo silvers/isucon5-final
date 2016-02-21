@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-H2O_REVISION=1.6.1
+H2O_REVISION=1.7.0
 
 wget -q https://github.com/h2o/h2o/archive/v$H2O_REVISION.tar.gz
 tar xzf v$H2O_REVISION.tar.gz

@@ -20,7 +20,7 @@ my $GOLANG_ENDPOINT = 'localhost:8083';
 
 my $isolator = Cache::Isolator->new(
     cache => Cache::Memcached::Fast->new({
-        servers => [ 'localhost:11211' ]
+        servers => [ 'app3.five-final.isucon.net:11211' ]
     }),
     concurrency => 4, # get_or_setのcallbackの最大平行動作数。デフォルト1
     interval => 0.01, #lockを確認するinterval
@@ -98,7 +98,7 @@ sub cache_expiration {
 sub db {
     state $db ||= do {
         my %db = (
-            host => $ENV{ISUCON5_DB_HOST} || 'localhost',
+            host => $ENV{ISUCON5_DB_HOST} || 'db.five-final.isucon.net',
             port => $ENV{ISUCON5_DB_PORT} || 5432,
             username => $ENV{ISUCON5_DB_USER} || 'isucon',
             password => $ENV{ISUCON5_DB_PASSWORD},
@@ -130,6 +130,7 @@ SELECT id, email, grade FROM users WHERE email=? AND passhash=digest(salt || ?, 
 SQL
     my $user = db->select_row($query, $email, $password);
     if ($user) {
+        stash->{user} = $user;
         session->{user_id} = $user->{id};
     }
     return $user;
@@ -362,7 +363,11 @@ get '/data' => [qw(set_global)] => sub {
 get '/initialize' => sub {
     my ($self, $c) = @_;
     my $file = File::Spec->rel2abs("../../sql/initialize.sql", dirname(dirname(__FILE__)));
-    system("psql", "-f", $file, "isucon5f");
+    system "psql",
+        -h => 'db.five-final.isucon.net',
+        -U => 'isucon',
+        -f => $file,
+        -d => "isucon5f";
     my $users = db->select_all("SELECT id,email,grade FROM users");
     for (@$users) {
         $isolator->set(sprintf('%s:%s', $USER_CACHE_KEY, $_->{id}), $_);
