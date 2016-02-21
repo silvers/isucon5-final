@@ -5,6 +5,7 @@ import (
 	"log"
 	"bytes"
 	"io/ioutil"
+	"crypto/tls"
 	"net/http"
 	"strings"
 	"sync"
@@ -60,6 +61,11 @@ func parallelReq(requests []Req) <-chan Data {
 	wg := &sync.WaitGroup{}
 	reciever := make(chan Data, len(requests))
 
+	client := http.DefaultClient
+	client.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
 	go func() {
 		for i := range requests {
 			wg.Add(1)
@@ -74,7 +80,7 @@ func parallelReq(requests []Req) <-chan Data {
 			log.Printf("[start] url: %s", req.Endpoint)
 			go func() {
 				defer wg.Done()
-				res, err := http.DefaultClient.Do(request)
+				res, err := client.Do(request)
 				if err != nil {
 					log.Printf("[end] url: %s", req.Endpoint)
 					panic(err)
