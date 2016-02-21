@@ -19,7 +19,7 @@ my $USER_CACHE_KEY = 'users';
 
 my $isolator = Cache::Isolator->new(
     cache => Cache::Memcached::Fast->new({
-        servers => [ 'localhost:11211' ]
+        servers => [ 'app3.five-final.isucon.net:11211' ]
     }),
     concurrency => 4, # get_or_setのcallbackの最大平行動作数。デフォルト1
     interval => 0.01, #lockを確認するinterval
