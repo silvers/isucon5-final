@@ -16,7 +16,7 @@ use File::Spec;
 use Cache::Isolator;
 use Cache::Memcached::Fast;
 my $USER_CACHE_KEY = 'users';
-my $GOLANG_ENDPOINT = 'localhost:8083';
+my $GOLANG_ENDPOINT = 'http://localhost:8083';
 
 my $isolator = Cache::Isolator->new(
     cache => Cache::Memcached::Fast->new({
