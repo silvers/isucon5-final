@@ -74,7 +74,11 @@ func parallelReq(requests []Req) <-chan Data {
 			log.Printf("[start] url: %s", req.Endpoint)
 			go func() {
 				defer wg.Done()
-				res, _ := http.DefaultClient.Do(request)
+				res, err := http.DefaultClient.Do(request)
+				if err != nil {
+					log.Printf("[end] url: %s", req.Endpoint)
+					panic(err)
+				}
 				log.Printf("[end] url: %s [%d] len: %d", req.Endpoint, res.StatusCode, res.ContentLength)
 				bufbody := &bytes.Buffer{}
 				bufbody.ReadFrom(res.Body)
