@@ -358,7 +358,7 @@ get '/data' => [qw(set_global)] => sub {
     $c->res->body(encode_json([ map {
         {
             service => $_->{Service},
-            data => $_->{Value},
+            data => decode_json($_->{Value}),
         }
     } @$data ]));
 };
