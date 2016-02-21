@@ -13,4 +13,5 @@ else
     git reset --hard
     git pull
     ./config/install.sh
+    sudo -H service memcached restart
 fi
