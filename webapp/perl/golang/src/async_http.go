@@ -2,11 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	// "fmt"
+	"log"
 	"io"
 	"io/ioutil"
 	"net/http"
-	// "net/http/httputil"
 	"strings"
 	"sync"
 )
@@ -35,6 +34,7 @@ func main() {
 func handler(w http.ResponseWriter, r *http.Request) {
 	var requests []Req
 	body, _ := ioutil.ReadAll(r.Body)
+	log.Printf("body: %s", body)
 	json.Unmarshal(body, &requests)
 
 	data := make([]Data, 0, len(requests))
@@ -45,6 +45,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		res, ok := <-reciever
 		if !ok {
 			json, _ := json.Marshal(data)
+			log.Printf("json: %s", json)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write(json)
@@ -56,8 +57,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func parallelReq(requests []Req) <-chan Data {
-
-	wg := new(sync.WaitGroup)
+	wg := &sync.WaitGroup{}
 	reciever := make(chan Data, len(requests))
 
 	go func() {
@@ -71,9 +71,11 @@ func parallelReq(requests []Req) <-chan Data {
 				request.Header.Set(header[0], header[1])
 			}
 
+			log.Printf("[start] url: %s", req.Endpoint)
 			go func() {
 				defer wg.Done()
 				res, _ := http.DefaultClient.Do(request)
+				log.Printf("[end] url: %s [%d] len: %d", req.Endpoint, res.StatusCode, res.ContentLength)
 				buf := make([]byte, res.ContentLength)
 				io.ReadFull(res.Body, buf)
 				body := string(buf)
