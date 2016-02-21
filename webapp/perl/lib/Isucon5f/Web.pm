@@ -349,7 +349,7 @@ get '/initialize' => sub {
     my $file = File::Spec->rel2abs("../../sql/initialize.sql", dirname(dirname(__FILE__)));
     system "psql",
         -h => 'db.five-final.isucon.net',
-        -U => 'isucon5f',
+        -U => 'isucon',
         -f => $file,
         -d => "isucon5f";
     my $users = db->select_all("SELECT id,email,grade FROM users");
