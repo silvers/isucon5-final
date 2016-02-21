@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"io"
+	"bytes"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -76,9 +76,12 @@ func parallelReq(requests []Req) <-chan Data {
 				defer wg.Done()
 				res, _ := http.DefaultClient.Do(request)
 				log.Printf("[end] url: %s [%d] len: %d", req.Endpoint, res.StatusCode, res.ContentLength)
-				buf := make([]byte, res.ContentLength)
-				io.ReadFull(res.Body, buf)
-				body := string(buf)
+				bufbody := &bytes.Buffer{}
+				bufbody.ReadFrom(res.Body)
+				body := bufbody.String()
+				// buf := make([]byte, res.ContentLength)
+				// io.ReadFull(res.Body, buf)
+				// body := string(buf)
 				res.Body.Close()
 				reciever <- Data{req.Service, body}
 			}()
