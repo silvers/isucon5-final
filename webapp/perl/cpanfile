@@ -13,4 +13,5 @@ requires "Cookie::Baker::XS";
 requires "WWW::Form::UrlEncoded::XS";
 requires "Devel::KYTProf";
 requires "Cache::Isolator";
-requires "Cache::Memcached::Fast";
+requires "Cache::Memcached::Fast::Safe";
+requires "URI::Escape::XS";

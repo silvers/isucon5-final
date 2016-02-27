@@ -21,6 +21,11 @@ else
         git pull
     fi
     pkill async_http
+
+    cd webapp/perl
+    /home/isucon/env.sh carton install
+    cd ../..
+
     ./config/install.sh
     sudo -H supervisorctl start golang
 fi

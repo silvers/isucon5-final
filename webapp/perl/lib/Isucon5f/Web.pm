@@ -8,92 +8,103 @@ use Encode;
 use Kossy;
 use DBIx::Sunny;
 use JSON;
-use Furl;
-use URI;
+use Furl::HTTP;
+use URI::Escape::XS qw/uri_escape/;
 use IO::Socket::SSL qw(SSL_VERIFY_NONE);
 use String::Util qw(trim);
 use File::Basename qw(dirname);
 use File::Spec;
 use Cache::Isolator;
-use Cache::Memcached::Fast;
+use Cache::Memcached::Fast::Safe;
 my $USER_CACHE_KEY = 'users';
 my $GOLANG_ENDPOINT = 'http://localhost:8083';
 
-my $isolator = Cache::Isolator->new(
-    cache => Cache::Memcached::Fast->new({
-        servers => [ 'app3.five-final.isucon.net:11211' ]
-    }),
+use constant +{
+    HTTP_MINOR_VERSION => 0,
+    HTTP_CODE          => 1,
+    HTTP_MSG           => 2,
+    HTTP_HEADERS       => 3,
+    HTTP_BODY          => 4,
+};
+
+my $JSON = JSON->new;
+my $UA = Furl::HTTP->new();
+my $CACHE = Cache::Memcached::Fast::Safe->new({
+    servers            => [ 'app3.five-final.isucon.net:11211' ],
+    utf8               => 1,
+    serialize_methods  => [sub { $JSON->encode(@_) }, sub { $JSON->decode(@_) }],
+});
+my $ISOLATOR = Cache::Isolator->new(
+    cache => $CACHE,
     concurrency => 4, # get_or_setのcallbackの最大平行動作数。デフォルト1
     interval => 0.01, #lockを確認するinterval
     timeout => 10, #lockする最長時間
     trial => 0, #lockを試行する最大回数
 );
 
+my %SERVICES = map { $_->{service} => $_ } (
+    {
+        service => 'ken',
+        meth => 'GET',
+        token_type => undef,
+        token_key => undef,
+        uri => 'http://api.five-final.isucon.net:8082/%s'
+    },
+    {
+        service => 'ken2',
+        meth => 'GET',
+        token_type => undef,
+        token_key => undef,
+        uri => 'http://api.five-final.isucon.net:8082/'
+    },
+    {
+        service => 'surname',
+        meth => 'GET',
+        token_type => undef,
+        token_key => undef,
+        uri => 'http://api.five-final.isucon.net:8081/surname'
+    },
+    {
+        service => 'givenname',
+        meth => 'GET',
+        token_type => undef,
+        token_key => undef,
+        uri => 'http://api.five-final.isucon.net:8081/givenname'
+    },
+    {
+        service => 'tenki',
+        meth => 'GET',
+        token_type => 'param',
+        token_key => 'zipcode',
+        uri => 'http://api.five-final.isucon.net:8988/'
+    },
+    {
+        service => 'perfectsec',
+        meth => 'GET',
+        token_type => 'header',
+        token_key => 'X-PERFECT-SECURITY-TOKEN',
+        uri => 'https://api.five-final.isucon.net:8443/tokens'
+    },
+    {
+        service => 'perfectsec_attacked',
+        meth => 'GET',
+        token_type => 'header',
+        token_key => 'X-PERFECT-SECURITY-TOKEN',
+        uri => 'https://api.five-final.isucon.net:8443/attacked_list'
+    },
+);
+
 sub endpoints {
     my ($service) = @_;
-    my $services = [
-        {
-            service => 'ken',
-            meth => 'GET',
-            token_type => undef,
-            token_key => undef,
-            uri => 'http://api.five-final.isucon.net:8082/%s'
-        },
-        {
-            service => 'ken2',
-            meth => 'GET',
-            token_type => undef,
-            token_key => undef,
-            uri => 'http://api.five-final.isucon.net:8082/'
-        },
-        {
-            service => 'surname',
-            meth => 'GET',
-            token_type => undef,
-            token_key => undef,
-            uri => 'http://api.five-final.isucon.net:8081/surname'
-        },
-        {
-            service => 'givenname',
-            meth => 'GET',
-            token_type => undef,
-            token_key => undef,
-            uri => 'http://api.five-final.isucon.net:8081/givenname'
-        },
-        {
-            service => 'tenki',
-            meth => 'GET',
-            token_type => 'param',
-            token_key => 'zipcode',
-            uri => 'http://api.five-final.isucon.net:8988/'
-        },
-        {
-            service => 'perfectsec',
-            meth => 'GET',
-            token_type => 'header',
-            token_key => 'X-PERFECT-SECURITY-TOKEN',
-            uri => 'https://api.five-final.isucon.net:8443/tokens'
-        },
-        {
-            service => 'perfectsec_attacked',
-            meth => 'GET',
-            token_type => 'header',
-            token_key => 'X-PERFECT-SECURITY-TOKEN',
-            uri => 'https://api.five-final.isucon.net:8443/attacked_list'
-        },
-    ];
-    if ($service) {
-        my ($hit) = grep { $_->{service} eq $service } @$services;
-        return $hit;
-    }
-    return $services;
+    return $SERVICES{$service};
 }
 
 sub cache_expiration {
     my ($service) = @_;
     return 86400 if ($service =~ /ken/);
     return 86400 if ($service =~ /users/);
-    return 300; # 暫定
+    return 5     if ($service eq 'tenki');
+    return 10; # 暫定
 }
 
 sub db {
@@ -141,7 +152,7 @@ sub current_user {
     my $user = stash->{user};
     return $user if $user;
     return undef if !session->{user_id};
-    $user = $isolator->get(sprintf('%s:%s', $USER_CACHE_KEY, session->{user_id}));
+    $user = $CACHE->get("$USER_CACHE_KEY:".session->{user_id});
     if (!$user) {
         session = +{};
     } else {
@@ -190,10 +201,10 @@ SQL
     {
         my $txn = db->txn_scope;
         my $user_id = db->select_one($insert_user_query, $email, $salt, $salt, $password, $grade);
-        db->query($insert_subscription_query, $user_id, to_json($default_arg));
+        db->query($insert_subscription_query, $user_id, $JSON->encode($default_arg));
         my $new_user = db->select_row('SELECT id,email,grade FROM users WHERE id=?', $user_id);
-        $isolator->set(sprintf('%s:%s', $USER_CACHE_KEY, $user_id), $new_user);
         $txn->commit;
+        $CACHE->set("$USER_CACHE_KEY:$user_id", $new_user);
     }
     $c->redirect('/login');
 };
@@ -278,7 +289,7 @@ SQL
     {
         my $txn = db->txn_scope;
         my $arg_json = db->select_one($select_query, $user->{id});
-        my $arg = from_json($arg_json);
+        my $arg = $JSON->decode($arg_json);
         if (!$arg->{$service}) { $arg->{$service} = +{}; }
         if ($token) { $arg->{$service}{token} = $token; }
         if ($keys) { $arg->{$service}{keys} = $keys; }
@@ -286,30 +297,113 @@ SQL
             if (!$arg->{$service}{params}) { $arg->{$service}{params} = +{}; }
             $arg->{$service}{params}{$param_name} = $param_value;
         }
-        db->query($update_query, to_json($arg), $user->{id});
+        db->query($update_query, $JSON->encode($arg), $user->{id});
         $txn->commit;
     }
     $c->redirect('/modify');
 };
 
-sub fetch_api {
-    my ($method, $uri, $headers, $params, $expiration) = @_;
-    my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
-    $uri = URI->new($uri);
-    $uri->query_form(%$params);
-    my $cache_key = join(':', $uri->as_string, %$headers);
-    my $res = $isolator->get_or_set(
-        $cache_key,
-        sub {
-            $client->request(
-                method => $method,
-                url => $uri,
-                headers => [%$headers],
-            );
-        },
-        $expiration,
-    );
-    return decode_json($res->content);
+sub _create_requests {
+    my ($user_id) = @_;
+
+    my $arg_json = db->select_one("SELECT arg FROM subscriptions WHERE user_id = ?", $user_id);
+    my $arg = $JSON->decode($arg_json);
+
+    my @requests;
+    for my $service (keys %$arg) {
+        my $conf = $arg->{$service};
+
+        my $row = endpoints($service);
+        my $expiration = cache_expiration($service);
+        my $endpoint = sprintf $row->{uri}, @{ $conf->{keys} || [] };
+        my %params = defined $conf->{params} ? %{ $conf->{params} } : ();
+
+        my %headers;
+        my $token_type = $row->{token_type};
+        if (not defined $token_type) {
+            # nothing to do
+        }
+        elsif ($token_type eq 'header') {
+            my $token_key = $row->{token_key};
+            $headers{$token_key} = $conf->{token};
+        }
+        elsif ($token_type eq 'param') {
+            my $token_key = $row->{token_key};
+            $params{$token_key} = $conf->{token};
+        }
+
+        if (%params) {
+            $endpoint .= '?';
+            for my $key (keys %params) {
+                $endpoint .= uri_escape($key).'='.uri_escape($params{$key}).'&';
+            }
+            chop $endpoint;
+        }
+
+        my $cache_key = join '=', $endpoint, %headers;
+        push @requests => {
+            cache_key  => $cache_key,
+            expiration => $expiration,
+            service    => $service,
+            headers    => \%headers,
+            endpoint   => $endpoint,
+        };
+    }
+
+    return @requests;
+}
+
+sub _fetch_apis_by_requests {
+    my @requests = @_;
+    return [] if @requests == 0;
+
+    my @cache_keys = map { $_->{cache_key} } @requests;
+
+    # get from cache
+    my $ret = $CACHE->get_multi(@cache_keys);
+    my @non_cached_requests = grep { not defined $ret->{$_->{cache_key}} } @requests;
+    return [values %$ret] unless @non_cached_requests;
+
+    # TODO: なんとかする
+    # if (@non_cached_requests == 1) {
+    #     return [_fetch_api_by_request($non_cached_requests[0])];
+    # }
+
+    # send request to backend
+    my $body = Encode::encode_utf8($JSON->encode(\@non_cached_requests));
+    my @res = $UA->post($GOLANG_ENDPOINT, ['Content-Type' => 'application/json'], $body);
+    my $responses = $JSON->decode(Encode::decode_utf8($res[HTTP_BODY]));
+
+    # set cache
+    my @cache_requests;
+    for my $response (@$responses) {
+        my $cache_key  = delete $response->{cache_key};
+        my $expiration = delete $response->{expiration};
+        push @cache_requests => [$cache_key, $response, $expiration];
+    }
+    $CACHE->set_multi(@cache_requests);
+
+    return [values %$ret, @$responses];
+}
+
+# XXX: なんかうまくいかない
+sub _fetch_api_by_request {
+    my ($request) = @_;
+    return $ISOLATOR->get_or_set($request->{cache_key}, sub {
+        my @res = $UA->get($request->{endpoint}, [%{$request->{headers}}]);
+        return {
+            service => $request->{service},
+            data    => $JSON->decode(Encode::decode_utf8($res[HTTP_BODY])),
+        };
+    }, $request->{expiration});
+}
+
+sub fetch_apis {
+    my ($user_id) = @_;
+    my @requests = _create_requests($user_id);
+    # TODO: なんとかする
+    # return [_fetch_api_by_request(@requests)] if @requests == 1;
+    return _fetch_apis_by_requests(@requests);
 }
 
 get '/data' => [qw(set_global)] => sub {
@@ -317,51 +411,9 @@ get '/data' => [qw(set_global)] => sub {
     my $user = current_user();
     $c->halt(403) if !$user;
 
-    my $arg_json = db->select_one("SELECT arg FROM subscriptions WHERE user_id=?", $user->{id});
-    my $arg = from_json($arg_json);
-
-    my $body = [];
-
-    while (my ($service, $conf) = each(%$arg)) {
-        my $row = endpoints($service);
-        my $expiration = cache_expiration($service);
-        my $method = $row->{meth};
-        my $token_type = $row->{token_type};
-        my $token_key = $row->{token_key};
-        my $uri_template = $row->{uri};
-        my $headers = +{};
-        my $params = $conf->{params} || +{};
-        given ($token_type) {
-            when ('header') {
-                $headers->{$token_key} = $conf->{'token'};
-            }
-            when ('param') {
-                $params->{$token_key} = $conf->{'token'};
-            }
-        }
-        my $uri = URI->new(sprintf($uri_template, @{$conf->{keys} || []}));
-        $uri->query_form(%$params);
-        push @$body, {
-            Service => $service,
-            Headers => $headers,
-            Method  => $method,
-            Endpoint => $uri->as_string,
-        };
-    }
-    my $client = Furl->new(ssl_opts => { SSL_verify_mode => SSL_VERIFY_NONE });
-    # TODO: あとでキャッシュする
-    my $res = $client->post($GOLANG_ENDPOINT, ['Content-Type' => 'application/json'], encode_json($body));
-    my $data = [];
-    if ($res->content) {
-        $data = decode_json($res->content);
-    }
-    $c->res->header('Content-Type', 'application/json');
-    $c->res->body(encode_json([ map {
-        {
-            service => $_->{Service},
-            data => decode_json(Encode::encode_utf8 $_->{Value}),
-        }
-    } @$data ]));
+    my $res = fetch_apis($user->{id});
+    $c->res->header('Content-Type' => 'application/json');
+    $c->res->body(Encode::encode_utf8($JSON->encode($res)));
 };
 
 get '/initialize' => sub {
@@ -372,10 +424,15 @@ get '/initialize' => sub {
         -U => 'isucon',
         -f => $file,
         -d => "isucon5f";
+
     my $users = db->select_all("SELECT id,email,grade FROM users");
-    for (@$users) {
-        $isolator->set(sprintf('%s:%s', $USER_CACHE_KEY, $_->{id}), $_);
-    }
+    my @cache_requests = map { ["$USER_CACHE_KEY:$_->{id}", $_] } @$users;
+    $CACHE->set_multi(@cache_requests);
+
+    my %seen;
+    my @requests = grep { $_->{expiration} == 86400 && !$seen{$_->{cache_key}}++ } map { _create_requests($_->{id}) } @$users;
+    _fetch_apis_by_requests(@requests[0..300]);
+
     [200];
 };
 
